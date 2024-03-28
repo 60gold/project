@@ -16,4 +16,4 @@ code
 image
 /project/fxcurrency-image
 ```
-![fxcurrency_1](fxcurrency03.PNG "fxcurrency.png")
+![fxcurrency_1](fxcurrency-image/fxcurrency03.PNG "fxcurrency.png")
