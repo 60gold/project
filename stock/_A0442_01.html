@@ -1,0 +1,162 @@
+<div id="funcBar" class="bg_blue"></div>
+<div id="tabTitle" class="newBlock bg_blue"></div>
+<div id="funcPageContent" class="newBlock bg_blue" data-pageid="_A0442_01">
+  <div class="upper"></div>
+  <div class="content">
+    <ul class="list"></ul>
+  </div>
+</div>
+<div id="footer"></div>
+<div id="footerMenu"></div>
+
+<script>
+  function controller() {
+    var ctrl = {};
+    ctrl.data = {
+      pageid: jq('#funcPageContent').data('pageid'),
+      menuList: [
+        { name: 'hot', txt: 'menuHot', key: 'StockListHot' },
+        { name: 'select', txt: 'menuSelect', key: 'StockListETF' }
+      ],
+      stocksListHot: []
+    };
+
+    //依據參數設定查詢熱門境外股票及ETF
+    //workcode=fetchStocksListHot
+    ctrl.fetchStocksListHot = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchStocksListHot()
+        .then(function (res) {
+          ctrl.data.stocksListHot = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //前往申購頁
+    function jumpTopPage($this) {
+      var trustNo = $this.data('trustno');
+      HeaderObject.SetData({ trustNo: trustNo });
+      if (
+        yuantaApp.checkLogin('_A0436', function () {
+          location.replace('#');
+        })
+      ) {
+        stockSubscriptionModule.dispCacheService.setGoBackPageID(jq('#funcPageContent').data('pageid'));
+        yuantaApp.loadpage('_A0436_01', true);
+      }
+    }
+
+    //小卡
+    function stockCardModule(key, stockCardList) {
+      stockSubscriptionModule
+        .StockCardModule()
+        .set('data', stockCardList)
+        .event('click', function ($this) {
+          if (key === 'StockListHot' || key === 'StockListETF') {
+            jumpTopPage($this);
+          }
+        })
+        .event('clickLinkBox', function ($this) {
+          var trustNo = $this.parent().find('.btn_blue').data('trustno');
+          var url = 'https://yuantabank.moneydj.com/w/CustFundIDMap.djhtm?A=' + trustNo + '&B=1001';
+          yuantaApp.openURL(url);
+        })
+        .appendTo('#funcPageContent .content .list')
+        .build();
+    }
+
+    //熱門股票標籤
+    function stockMenuModule() {
+      stockSubscriptionModule
+        .StockMenuModule()
+        .set('menuList', ctrl.data.menuList)
+        .event('click', function (e) {
+          var $topMenuSet = jq('.topMenu_set');
+          var key = e.target.getAttribute('data-key');
+          var dataKey = "[data-key='" + key + "']";
+          var stockCardList = ctrl.data.stocksListHot[key];
+
+          var event = '';
+          switch (key) {
+            case 'StockListHot':
+              event = 'a';
+              break;
+            case 'StockListETF':
+              event = 'b';
+              break;
+          }
+
+          yuantaApp.goFunctionPage(ctrl.data.pageid, '', event, function () {
+            yuantaApp.recServiceDWID();
+            $topMenuSet.children('div').removeClass('on');
+            $topMenuSet.find(dataKey).addClass('on');
+            stockCardModule(key, stockCardList);
+          });
+        })
+        .appendTo('.upper')
+        .build()
+        .mounted(function ($menu) {
+          $menu.find('div').eq(0).click();
+        });
+    }
+
+    //上方tab
+    function tabGropuModule() {
+      jq('#funcPageContent').find('.top_header').remove();
+      stockSubscriptionModule
+        .StockTab()
+        .event('click', function (key) {
+          switch (key) {
+            case '_A0440_01':
+              // yuantaApp.simulateClickSlideMenu('_A0441');
+              yuantaApp.loadpage('_A0440_01');
+              break;
+            case '_A0441_01':
+              // yuantaApp.simulateClickSlideMenu('_A0442');
+              yuantaApp.loadpage('_A0441_01', true);
+              break;
+          }
+        })
+        .appendTo('.upper', 'prepend')
+        .build();
+    }
+
+    function init() {
+      ctrl
+        .fetchStocksListHot()
+        .then(function () {
+          stockMenuModule();
+          tabGropuModule();
+          yuantaApp.newBlock._footerMenu(jq('#footerMenu'));
+          yuantaApp.pageContentResizeCustom('#footerMenu');
+          yuantaApp.gettransarr();
+        })
+        .catch(function () {
+          yuantaApp.loadpage('grid');
+        })
+        .always(function () {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+        });
+    }
+    init();
+  }
+  controller();
+</script>
+
+<style>
+  #funcPageContent .data_set .date {
+    padding-right: 0px;
+    margin-bottom: 0;
+    text-align: center;
+    font-family: 'Roboto', sans-serif !important;
+  }
+  #funcPageContent .data_set .heading {
+    padding: 0 10px 0 12px;
+  }
+</style>

@@ -1,0 +1,1648 @@
+<div id="funcBar" class="bg_blue"></div>
+<div id="tabTitle" class="newBlock bg_blue"></div>
+<div id="funcPageContent" class="newBlock" data-pageid="_A0436_01"></div>
+
+<!-- 合約條款 -->
+<div id="stockContractPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+<!-- 交易確認 -->
+<div id="stockTransactionConfirmationPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+<div id="stockResultsPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+
+<script>
+  function controller(data) {
+    function SubscriptionStockService() {
+      var ctrl = {};
+      ctrl.data = {
+        trustNo: '',
+        stockData: null,
+        invType: '1', //目前只有單筆申購
+        stockInvestorList: null,
+        longTermOrderDate: null,
+        orderOverseasStocks: null,
+        subscriptionStockData: null,
+        transFidoFlag: HeaderObject.GetLoginByFidoFlag(),
+        countFidoTimes: 0,
+        rate: 1,
+        age: HeaderObject.GetLoginObject() && HeaderObject.GetLoginObject().custInfo && HeaderObject.GetLoginObject().custInfo.age,
+        fundBranchData: null,
+        fundCustAndKycInfo: null,
+        fceAcctList: [],
+        investmentCurrencyWarnMessage: '',
+        isFundBuyBusinessdate: '0',
+        saveDebitAccount: false,
+        isDisableInput: false
+      };
+
+      ctrl.setDisableInput = function (status) {
+        ctrl.data.isDisableInput = status;
+      };
+
+      ctrl.getDisableInput = function () {
+        return ctrl.data.isDisableInput;
+      };
+
+      //條文簽署List
+      var getContractList = function () {
+        var arr = [];
+
+        //特別約定事項
+        arr.push({
+          name: 'StockTradedSubscriptionPopup',
+          func: stockSubscriptionModule.StockTradedSubscriptionPopup,
+          isSign: false,
+          goFuncType: 'a'
+        });
+
+        //授權圈存/扣款約定條款
+        arr.push({
+          name: 'StockAgreementOnDepositAndDebitPopup',
+          func: stockSubscriptionModule.StockAgreementOnDepositAndDebitPopup,
+          isSign: false,
+          goFuncType: 'b'
+        });
+
+        //信託報酬及投資風險告知
+        arr.push({
+          name: 'StockTrustRemunerationPopup',
+          func: stockSubscriptionModule.StockTrustRemunerationPopup,
+          isSign: false,
+          goFuncType: 'c'
+        });
+
+        //特定金錢信託投資境外指數股票型基金(ETF)/ 境外股票(含特別股)特約事項暨風險預告書
+        arr.push({
+          name: 'StockETFRiskPopup',
+          func: stockSubscriptionModule.StockETFRiskPopup,
+          isSign: false,
+          goFuncType: 'd'
+        });
+
+        //PFXX-產品說明書暨風險預告書及特別股申購聲明書
+        ctrl.isPFXX() &&
+          arr.push({
+            name: 'StockPFXXRiskPopup',
+            func: stockSubscriptionModule.StockPFXXRiskPopup,
+            isSign: false,
+            goFuncType: 'e'
+          });
+
+        //客戶審慎評估投資聲明書
+        ctrl.isShelfQualify() &&
+          arr.push({
+            name: 'StockInterestByUserPopup',
+            func: stockSubscriptionModule.StockInterestByUserPopup,
+            isSign: false,
+            goFuncType: 'f'
+          });
+
+        //金融商品投資風險告知書
+        //65歲以上客戶(包含專業投資人)申購時須簽署
+        ctrl.data.age >= 65 &&
+          arr.push({
+            name: 'StockInvestmentRiskPopup',
+            func: stockSubscriptionModule.StockInvestmentRiskPopup,
+            isSign: false,
+            goFuncType: 'g'
+          });
+
+        //本人確認聲明
+        arr.push({
+          name: 'StockConfirmStatementPopup',
+          func: stockSubscriptionModule.StockConfirmStatementPopup,
+          isSign: false,
+          goFuncType: 'h'
+        });
+
+        //敬請詳閱投資風險重要須知
+        //65歲以上客戶(包含專業投資人)申購時須簽署
+        ctrl.data.age >= 65 &&
+          arr.push({
+            name: 'StocCareQuestionnairePopup',
+            func: stockSubscriptionModule.StocCareQuestionnairePopup,
+            isSign: false,
+            goFuncType: 'i'
+          });
+
+        return arr;
+      };
+      ctrl.contractIndex = 0;
+      ctrl.contractName = '';
+      ctrl.contractList = [];
+
+      //條文簽署
+      ctrl.contractIterator = function () {
+        var node = '#stockContractPopup';
+        var handleConfirm = function () {
+          ctrl.contractList[ctrl.contractIndex].isSign = true;
+          ctrl.contractIndex++;
+          ctrl.contractName = ctrl.contractList[ctrl.contractIndex].name;
+          yuantaApp.goFunctionPage(
+            jq('#funcPageContent').data('pageid'),
+            '01',
+            ctrl.contractList[ctrl.contractIndex].goFuncType,
+            function () {
+              ctrl.contractIterator().next();
+            },
+            { start: true, end: true }
+          );
+        };
+        var handlePopupClose = function () {
+          if (ctrl.contractIndex > 0) {
+            ctrl.contractIndex--;
+            ctrl.contractName = ctrl.contractList[ctrl.contractIndex].name;
+            yuantaApp.goFunctionPage(
+              jq('#funcPageContent').data('pageid'),
+              '01',
+              ctrl.contractList[ctrl.contractIndex].goFuncType,
+              function () {
+                ctrl.contractIterator().back();
+              },
+              { start: true, end: true }
+            );
+          } else {
+            yuantaApp.goFunctionPage(jq('#funcPageContent').data('pageid'), '', '', function () {}, { start: true, end: true });
+          }
+        };
+        var openTransactionConfirmationPopup = function () {
+          yuantaApp.goFunctionPage(
+            jq('#funcPageContent').data('pageid'),
+            '02',
+            '',
+            function () {
+              ctrl.contractList[ctrl.contractIndex].isSign = true;
+              ctrl.openTransactionConfirmationPopup();
+            },
+            { start: true, end: true }
+          );
+        };
+        return {
+          next: function () {
+            var run = function () {
+              jq(node).empty();
+              if (ctrl.contractIndex < ctrl.contractList.length) {
+                if (ctrl.contractName == 'StockConfirmStatementPopup' && ctrl.data.age < 65) {
+                  ctrl.contractList[ctrl.contractIndex]
+                    .func()
+                    .set('isSign', ctrl.contractList[ctrl.contractIndex].isSign)
+                    .set('trustNo', ctrl.data.trustNo)
+                    .event('confirm', function (data) {
+                      openTransactionConfirmationPopup();
+                    })
+                    .event('popupClose', handlePopupClose)
+                    .appendTo(node)
+                    .build()
+                    .open();
+                } else if (ctrl.contractName == 'StocCareQuestionnairePopup') {
+                  ctrl.contractList[ctrl.contractIndex]
+                    .func()
+                    .set('isSign', ctrl.contractList[ctrl.contractIndex].isSign)
+                    .set('trustNo', ctrl.data.trustNo)
+                    .event('confirm', function (data) {
+                      openTransactionConfirmationPopup();
+                    })
+                    .event('popupClose', handlePopupClose)
+                    .appendTo(node)
+                    .build()
+                    .open();
+                } else {
+                  ctrl.contractList[ctrl.contractIndex]
+                    .func()
+                    .set('isSign', ctrl.contractList[ctrl.contractIndex].isSign)
+                    .set('trustNo', ctrl.data.trustNo)
+                    .event('confirm', handleConfirm)
+                    .event('popupClose', handlePopupClose)
+                    .appendTo(node)
+                    .build()
+                    .open();
+                }
+              }
+            };
+            if (window && window.requestAnimationFrame) {
+              requestAnimationFrame(function () {
+                run();
+              });
+            } else {
+              run();
+            }
+          },
+          back: function () {
+            var run = function () {
+              jq(node).empty();
+              ctrl.contractList[ctrl.contractIndex]
+                .func()
+                .set('isSign', ctrl.contractList[ctrl.contractIndex].isSign)
+                .set('trustNo', ctrl.data.trustNo)
+                .event('confirm', handleConfirm)
+                .event('popupClose', handlePopupClose)
+                .appendTo(node)
+                .build()
+                .open();
+            };
+            if (window && window.requestAnimationFrame) {
+              requestAnimationFrame(function () {
+                run();
+              });
+            } else {
+              run();
+            }
+          }
+        };
+      };
+
+      //確認頁
+      ctrl.transactionConfirmationPopUpFactory = function (
+        invType,
+        orderOverseasStocks,
+        subscriptionStockData,
+        stockData,
+        confirmCallBack,
+        cancelCallBack,
+        popupCloseCallBack
+      ) {
+        jq('#stockTransactionConfirmationPopup').empty();
+        //目前只有單筆申購
+        switch (invType) {
+          case '1':
+            stockSubscriptionModule
+              .TransactionConfirmationByOneTimePopup()
+              .set('orderOverseasStocks', orderOverseasStocks)
+              .set('subscriptionStockData', subscriptionStockData)
+              .set('stockData', stockData)
+              .event('confirm', function (data) {
+                if (confirmCallBack && jq.isFunction(confirmCallBack)) {
+                  confirmCallBack(data);
+                }
+              })
+              .event('popupClose', function () {
+                if (popupCloseCallBack && jq.isFunction(popupCloseCallBack)) {
+                  popupCloseCallBack();
+                }
+              })
+              .event('cancel', function (data) {
+                if (cancelCallBack && jq.isFunction(cancelCallBack)) {
+                  cancelCallBack();
+                }
+              })
+              .service('getTransFidoFlag', ctrl.getTransFidoFlag)
+              .service('getForeignDebitAccount', ctrl.getForeignDebitAccount)
+              .service('getFullDebitAccountName', ctrl.getFullDebitAccountName)
+              .appendTo('#stockTransactionConfirmationPopup')
+              .build()
+              .open();
+            break;
+        }
+      };
+
+      //結果頁
+      ctrl.transactionResultsPopupFactory = function (invType, data, orderOverseasStocks, stockData) {
+        ctrl.contractIndex = 0;
+        ctrl.contractName = '';
+        ctrl.contractList = [];
+        var handleConfirm = function () {
+          stockSubscriptionModule.dispCacheService.clearGoBackPageID();
+          stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+          yuantaApp.loadpage('_A0440_01');
+        };
+        jq('#stockResultsPopup').empty();
+        switch (invType) {
+          case '1':
+            setTimeout(function () {
+              stockSubscriptionModule
+                .StockResultsByOneTimePopup()
+                .set('data', data)
+                .set('orderOverseasStocks', orderOverseasStocks)
+                .set('stockData', stockData)
+                .event('confirm', handleConfirm)
+                .service('getForeignDebitAccount', ctrl.getForeignDebitAccount)
+                .service('getFullDebitAccountName', ctrl.getFullDebitAccountName)
+                .appendTo('#stockResultsPopup')
+                .build()
+                .open();
+            }, 0);
+            break;
+        }
+      };
+
+      ctrl.openStockOneTimeTipsPopup = function (isRealTime, callBack) {
+        var modalData = {
+          showCloseBtn: false,
+          showConfirmBtn: true,
+          showCancelBtn: true,
+          confirmAddOnClass: false,
+          cancelAddOnClass: true,
+          confirmText: '取消',
+          cancelText: '確定'
+        };
+        if (isRealTime) {
+          yuantaApp.newBlock
+            ._commonPopupModule()
+            .set('modal', modalData)
+            .set('modalContent', '目前為此檔商品之市場交易時間，交易委託完成後將即時於交易所進行交易生效，請您再次確認交易內容是否正確！')
+            .event('popupCancel', function () {
+              callBack();
+            })
+            .appendTo()
+            .build()
+            .open();
+        } else {
+          if (ctrl.data.stockData.currency === 'USD') {
+            yuantaApp.newBlock
+              ._commonPopupModule()
+              .set('modal', modalData)
+              .set('modalContent', '目前為此檔商品之〝盤前交易〞時間，請您再次確認交易內容是否正確！')
+              .event('popupCancel', function () {
+                callBack();
+              })
+              .appendTo()
+              .build()
+              .open();
+          } else {
+            yuantaApp.newBlock
+              ._commonPopupModule()
+              .set('modal', modalData)
+              .set('modalContent', '目前已過此檔商品之市場交易時間，交易委託完成後將於下一市場日期進行交易，請您再次確認交易內容是否正確！')
+              .event('popupCancel', function () {
+                callBack();
+              })
+              .appendTo()
+              .build()
+              .open();
+          }
+        }
+      };
+
+      //開啟確認頁
+      ctrl.openTransactionConfirmationPopup = function () {
+        var orderOverseasStocks = ctrl.getOrderOverseasStocks();
+        var subscriptionStockData = ctrl.getSubscriptionStockData();
+        var stockData = ctrl.getStockData();
+        var saveDebitAccount = function () {
+          var account = subscriptionStockData.depWithdrawalAccount;
+          if (ctrl.getDebitAccountStatus()) {
+            stockSubscriptionModule.dispCacheService.setDebitAccount(account);
+          } else {
+            stockSubscriptionModule.dispCacheService.setDebitAccount('');
+          }
+        };
+        ctrl.transactionConfirmationPopUpFactory(
+          ctrl.data.invType,
+          orderOverseasStocks,
+          subscriptionStockData,
+          stockData,
+          function (data) {
+            //確認頁-確認按鈕
+            var subscriptionData = ctrl.getSubscriptionStockData();
+            var orderOverseasStocks = ctrl.getOrderOverseasStocks();
+            var isRealTime = orderOverseasStocks.appointmentNoteCode === 'N' ? true : false;
+            if (ctrl.data.invType == '1') {
+              ctrl.openStockOneTimeTipsPopup(isRealTime, function () {
+                if (ctrl.isTransFido()) {
+                  //fido驗證
+                  fpAuth.transFido(
+                    ctrl.data.transFidoFlag,
+                    function checkFidoSuccess() {
+                      //fido辨識成功>>>>>>要交易囉
+                      yuantaApp.goFunctionPage(
+                        jq('#funcPageContent').data('pageid'),
+                        '03',
+                        '',
+                        function () {
+                          ctrl
+                            .fetchOrderOverseasStocksTouchID(orderOverseasStocks)
+                            .then(function (res) {
+                              var messageCode = (res && res.messageCode) || '';
+                              var errMessage = (res && res.errMessage) || '';
+                              if (messageCode || errMessage) {
+                                subscriptionData = Object.assign(subscriptionData, {
+                                  errorCode: messageCode,
+                                  errorMessage: errMessage,
+                                  result: false
+                                });
+                              } else {
+                                subscriptionData = Object.assign(subscriptionData, {
+                                  result: true
+                                });
+                              }
+                              saveDebitAccount();
+                              ctrl.transactionResultsPopupFactory(ctrl.data.invType, subscriptionData, orderOverseasStocks, stockData);
+                            })
+                            .catch(function (res) {
+                              var messageCode = (res && res.messageCode) || '';
+                              var errMessage = (res && res.errMessage) || '';
+                              subscriptionData = Object.assign(subscriptionData, {
+                                errorCode: messageCode,
+                                errorMessage: errMessage,
+                                result: false
+                              });
+                              ctrl.transactionResultsPopupFactory(ctrl.data.invType, subscriptionData, orderOverseasStocks, stockData);
+                            });
+                        },
+                        { start: false, end: false }
+                      );
+                    },
+                    function fidoFail3Times() {
+                      //失敗三次的場合
+                      ctrl.data.transFidoFlag = 'N';
+                      ctrl.openTransactionConfirmationPopup();
+                    },
+                    function fidoFail() {
+                      //失敗的場合，手動計數
+                      ctrl.data.countFidoTimes++;
+                      if (ctrl.data.countFidoTimes == 3 || ctrl.data.countFidoTimes > 3) {
+                        ctrl.data.transFidoFlag = 'N';
+                        ctrl.openTransactionConfirmationPopup();
+                      }
+                    }
+                  );
+                } else {
+                  yuantaApp.goFunctionPage(
+                    jq('#funcPageContent').data('pageid'),
+                    '03',
+                    '',
+                    function () {
+                      //密碼驗證
+                      ctrl
+                        .fetchOrderOverseasStocksPwd(orderOverseasStocks)
+                        .then(function (res) {
+                          var messageCode = (res && res.messageCode) || '';
+                          var errMessage = (res && res.errMessage) || '';
+                          if (messageCode || errMessage) {
+                            subscriptionData = Object.assign(subscriptionData, {
+                              errorCode: messageCode,
+                              errorMessage: errMessage,
+                              result: false
+                            });
+                          } else {
+                            subscriptionData = Object.assign(subscriptionData, {
+                              result: true
+                            });
+                          }
+                          saveDebitAccount();
+                          ctrl.transactionResultsPopupFactory(ctrl.data.invType, subscriptionData, orderOverseasStocks, stockData);
+                        })
+                        .catch(function (res) {
+                          var messageCode = (res && res.messageCode) || '';
+                          var errMessage = (res && res.errMessage) || '';
+                          subscriptionData = Object.assign(subscriptionData, {
+                            errorCode: messageCode,
+                            errorMessage: errMessage,
+                            result: false
+                          });
+                          ctrl.transactionResultsPopupFactory(ctrl.data.invType, subscriptionData, orderOverseasStocks, stockData);
+                        });
+                    },
+                    { start: false, end: false }
+                  );
+                }
+              });
+            }
+          },
+          function () {
+            var modalData = {
+              showCloseBtn: false,
+              showConfirmBtn: true,
+              showCancelBtn: true,
+              confirmAddOnClass: false,
+              cancelAddOnClass: true,
+              confirmText: '保留',
+              cancelText: '確定取消'
+            };
+            var popup = yuantaApp.newBlock
+              ._commonPopupModule()
+              .set('modal', modalData)
+              .set('modalTitle', '您確定要取消?')
+              .event('popupConfirm', function () {})
+              .event('popupCancel', function () {
+                yuantaApp.loadpage('_A0434_01');
+              })
+              .appendTo()
+              .build();
+            popup.open();
+          },
+          function () {
+            yuantaApp.goFunctionPage(
+              jq('#funcPageContent').data('pageid'),
+              '01',
+              '',
+              function () {
+                yuantaApp.goFunctionPage(
+                  jq('#funcPageContent').data('pageid'),
+                  '01',
+                  'a',
+                  function () {
+                    ctrl.contractIterator().back();
+                  },
+                  { start: false, end: false }
+                );
+              },
+              { start: false, end: false }
+            );
+          }
+        );
+      };
+
+      ctrl.openSubscriptionStockPopup = function () {
+        ctrl.contractList = [];
+        ctrl.contractIndex = 0;
+        ctrl.contractName = '';
+        ctrl.contractList = getContractList();
+        ctrl.contractIterator().next();
+      };
+
+      //可以使用生物辨識交易
+      ctrl.isTransFido = function () {
+        return ctrl.data.transFidoFlag === 'Y' && HeaderObject.GetLoginType() === fpAuth.loginType;
+      };
+
+      ctrl.setTransFidoFlag = function (status) {
+        ctrl.data.transFidoFlag = status;
+      };
+
+      ctrl.getTransFidoFlag = function () {
+        return ctrl.data.transFidoFlag;
+      };
+
+      /** 弱勢身分客戶條件：65歲(含)以上 + 學歷國中以下 +  有重大傷病投資人 */
+      //不適合新增理財商品
+      ctrl.isCanNotPurchaseUser = function () {
+        return (
+          ctrl.data.age >= 65 &&
+          ctrl.data.fundCustAndKycInfo &&
+          ctrl.data.fundCustAndKycInfo.instroDept == 'Y' &&
+          ctrl.data.fundCustAndKycInfo.educationLevel <= '3'
+        );
+      };
+
+      //是否做過KYC
+      ctrl.hasKyc = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.custKyc;
+      };
+
+      //KYC已過期
+      ctrl.isKycExpired = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.effectStatus == 'N';
+      };
+
+      //是否可變更KYC(14天)
+      ctrl.canNotReSetKYC = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.canReSetKYCFlag == 'N';
+      };
+
+      //KYC上次設定日期
+      ctrl.getKYCLastKYCDate = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.lastKYCDate;
+      };
+
+      //KYC風險等級(理財)
+      ctrl.getKYCLevel = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.level;
+      };
+
+      //教育程度(理財)
+      ctrl.getKYCEducationLevel = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.educationLevel;
+      };
+
+      //重大傷病(理財)
+      ctrl.getKYCInstroDept = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.instroDept;
+      };
+
+      //是否為境外金融中心true/false
+      ctrl.isOBU = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.isOBU;
+      };
+
+      ctrl.getRRlevel = function (cusLevel) {
+        var rrarr = [];
+        switch (cusLevel) {
+          case '1': {
+            rrarr = [1, 2];
+            return rrarr;
+          }
+          case '2': {
+            rrarr = [1, 2, 3];
+            return rrarr;
+          }
+          case '3': {
+            rrarr = [1, 2, 3, 4];
+            return rrarr;
+          }
+          case '4': {
+            rrarr = [1, 2, 3, 4, 5];
+            return rrarr;
+          }
+          case '5': {
+            rrarr = [1, 2, 3, 4, 5, 6];
+            return rrarr;
+          }
+        }
+      };
+
+      //境外股票/ETF風險等級高於風險承受度
+      ctrl.isRiskLevelIncompatible = function () {
+        return (
+          ((ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.professional == '0') ||
+            (ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo.professional == '2')) &&
+          ctrl.data.stockData &&
+          ctrl.data.stockData.risk &&
+          jq.inArray(+ctrl.data.stockData.risk, ctrl.getRRlevel(ctrl.data.fundCustAndKycInfo.custKyc)) == -1
+        );
+      };
+
+      ctrl.getCurrency = function () {
+        return ctrl.data.stockData && ctrl.data.stockData.currency;
+      };
+
+      //是否有外幣帳戶
+      ctrl.hasFceAccount = function () {
+        return ctrl.data.stockInvestorList && ctrl.data.stockInvestorList.fceDepositAcct;
+      };
+
+      //是否有留存email及手機
+      ctrl.hasUserInfo = function () {
+        return stockSubscriptionModule.commonService.HasUserInfo();
+      };
+
+      //尚未辦理信託契約換約聲明書之填寫
+      ctrl.hasTrustVersion = function () {
+        return ctrl.data.fundCustAndKycInfo && !ctrl.data.fundCustAndKycInfo.version;
+      };
+
+      ctrl.getStockData = function () {
+        return ctrl.data.stockData || null;
+      };
+
+      //PFXX產品
+      ctrl.isPFXX = function () {
+        return ctrl.data.stockData && ctrl.data.stockData.trustNo && ctrl.data.stockData.trustNo.substr(0, 2) === 'PF';
+      };
+
+      //條件式上架
+      ctrl.isShelfQualify = function () {
+        return ctrl.data.stockData && ctrl.data.stockData.shelfQualify == 'Y';
+      };
+
+      ctrl.getFundBuyBusinessdate = function () {
+        // 0 營業日21:01-09:09 &非營業日 (不可換匯&基金非即時)
+        // 1 營業日09:10-15:30 (可換匯&基金即時)
+        // 2 營業日15:31-21:00 (可換匯&基金非即時)
+        return ctrl.data.isFundBuyBusinessdate ? ctrl.data.isFundBuyBusinessdate : '0';
+      };
+
+      //投資方式
+      ctrl.getInvType = function () {
+        return ctrl.data.invType || '';
+      };
+
+      //信託分行代號
+      ctrl.getBranchCode = function () {
+        return (ctrl.data.fundBranchData && ctrl.data.fundBranchData.branchCode) || '';
+      };
+
+      //信託帳號
+      ctrl.getTrustAccount = function () {
+        return (ctrl.data.stockInvestorList && ctrl.data.stockInvestorList.trustAccount) || '';
+      };
+
+      //手續費優惠代碼
+      ctrl.getFeeCode = function () {
+        if (ctrl.data.stockInvestorList) {
+          if (ctrl.data.stockInvestorList.applySuitProject) {
+            return ctrl.data.stockInvestorList.applySuitProject;
+          } else if (ctrl.data.stockInvestorList.keepCol) {
+            return String(ctrl.data.stockInvestorList.keepCol).substr(0, 2);
+          } else {
+            return '';
+          }
+        } else {
+          return '';
+        }
+      };
+
+      //匯率
+      ctrl.getRate = function () {
+        return ctrl.data.rate || '';
+      };
+
+      //首段-回傳response資料
+      ctrl.getOrderOverseasStocks = function () {
+        return ctrl.data.orderOverseasStocks && ctrl.data.orderOverseasStocks;
+      };
+
+      //首段-requset資料
+      ctrl.getSubscriptionStockData = function () {
+        return ctrl.data.subscriptionStockData && ctrl.data.subscriptionStockData;
+      };
+
+      ctrl.getSubscriptionStockServiceData = function () {
+        return (ctrl.data && ctrl.data) || null;
+      };
+
+      //kyc data
+      ctrl.getFundCustAndKycInfo = function () {
+        return ctrl.data.fundCustAndKycInfo && ctrl.data.fundCustAndKycInfo;
+      };
+
+      //是否為單筆申購
+      ctrl.isOneTimeStock = function (invType) {
+        return invType && invType == '1';
+      };
+
+      //KYC判斷
+      ctrl.handleKYC = function () {
+        if (!ctrl.hasKyc()) {
+          yuantaApp.newBlock
+            ._commonPopupModule()
+            .set('modal', {
+              showCloseBtn: false,
+              showConfirmBtn: true,
+              showCancelBtn: true,
+              confirmAddOnClass: false,
+              cancelAddOnClass: true,
+              confirmText: '取消',
+              cancelText: '立刻進行'
+            })
+            .set('modalTitle', '請先進行風險等級評量')
+            .set('modalContent', '您尚未做過投資風險評量，暫時不得辦理基金申購，請先進行評估後方可進行申購。')
+            .event('popupCancel', function () {
+              stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+              yuantaApp.loadpage('_B03_01');
+            })
+            .appendTo()
+            .build()
+            .open();
+        } else if (ctrl.isKycExpired()) {
+          var modalOption = {
+            showCloseBtn: false,
+            showConfirmBtn: true,
+            showCancelBtn: true,
+            confirmAddOnClass: false,
+            cancelAddOnClass: true,
+            confirmText: '取消',
+            cancelText: '重作問卷'
+          };
+          yuantaApp.newBlock
+            ._commonPopupModule()
+            .set('modal', modalOption)
+            .set('modalTitle', '風險評量已過期')
+            .set('modalContent', '對不起，您的投資風險評量有效期限已過期，在重辦理投資風險評量前，您暫時不得辦理基金申購、轉換及變更投資標的交易。')
+            .event('popupCancel', function () {
+              stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+              yuantaApp.loadpage('_B03_01');
+            })
+            .appendTo()
+            .build()
+            .open();
+        } else if (ctrl.canNotReSetKYC() && +new Date() < +new Date(ctrl.getKYCLastKYCDate()).addDay(14)) {
+          var modalOption = {
+            showCloseBtn: false,
+            showConfirmBtn: true,
+            showCancelBtn: false,
+            confirmAddOnClass: true,
+            cancelAddOnClass: false,
+            confirmText: '我知道了',
+            cancelText: ''
+          };
+          yuantaApp.newBlock
+            ._commonPopupModule()
+            .set('modal', modalOption)
+            .set('modalTitle', '風險等級14天內無法變更')
+            .set(
+              'modalContent',
+              '您前次辦理投資風險屬性評量(KYC)日期為<span class="key_blue">' +
+                ctrl.getKYCLastKYCDate() +
+                '</span>，自前述起算14天內不得再辦理變更。為保障您的權益，若您於上述期間內仍須辦理KYC評估，請至本行各分行臨櫃辦理。'
+            )
+            .appendTo()
+            .build()
+            .open();
+        } else {
+          stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+          yuantaApp.loadpage('_B03_01');
+        }
+      };
+
+      ctrl.updateDebitAccountStatus = function (value) {
+        ctrl.data.saveDebitAccount = value;
+      };
+
+      ctrl.getDebitAccountStatus = function () {
+        return ctrl.data.saveDebitAccount;
+      };
+
+      ctrl.getDebitAccount = function () {
+        return stockSubscriptionModule.dispCacheService.getDebitAccount();
+      };
+
+      //有該幣別外幣存款帳戶
+      ctrl.checkForeignDebitAccount = function (ccy) {
+        if (ctrl.data.fceAcctList && ctrl.data.fceAcctList.length <= 0) {
+          return;
+        }
+        var result = false;
+        for (var i = 0; (account = ctrl.data.fceAcctList[i]); i++) {
+          if (ccy == account.ccy) {
+            result = true;
+          }
+        }
+        return result;
+      };
+
+      ctrl.getForeignDebitAccount = function (deductAcctNo, invCcy) {
+        if (ctrl.data.fceAcctList && ctrl.data.fceAcctList.length <= 0) {
+          return;
+        }
+        for (var i = 0; (account = ctrl.data.fceAcctList[i]); i++) {
+          if (deductAcctNo == account.acctNo && invCcy == account.ccy) {
+            return account;
+          }
+        }
+      };
+
+      ctrl.getFullDebitAccountName = function (data) {
+        if (!data) {
+          return;
+        }
+        return data.branchName + '-' + data.acctNo;
+      };
+
+      //投資金額是否大於帳戶餘額(帳戶餘額不足)
+      ctrl.isInsufficientBalance = function (data, invCcy) {
+        var commPrice = data.commPrice;
+        var commQuantity = data.commQuantity;
+        var buyAmount = +commPrice * +commQuantity;
+        if (!data.depWithdrawalAccount) {
+          return false;
+        }
+        var currentDebitAccount = ctrl.getForeignDebitAccount(data.depWithdrawalAccount, invCcy);
+        if (currentDebitAccount.lcyBalance * 1 < buyAmount * 1) {
+          return true;
+        } else {
+          return false;
+        }
+      };
+
+      //有本行外幣存款帳戶但沒有該幣別
+      ctrl.hasFceAccountAndFceAcctList = function (currency) {
+        return ctrl.hasFceAccount() && ctrl.data.fceAcctList && ctrl.data.fceAcctList.length > 0 && !ctrl.checkForeignDebitAccount(currency);
+      };
+
+      //無本行外幣存款帳戶
+      ctrl.hasFceAccountAndNotFceAcctList = function (currency) {
+        return ctrl.data.fceAcctList && ctrl.data.fceAcctList.length <= 0;
+      };
+
+      //是否有留存email及手機
+      ctrl.openWarnPopupWhenUserInfoNonExist = function () {
+        var popup = yuantaApp.newBlock
+          ._commonPopupModule()
+          .set('modal', {
+            showCloseBtn: true,
+            showConfirmBtn: true,
+            showCancelBtn: true,
+            confirmAddOnClass: false,
+            cancelAddOnClass: true,
+            confirmText: '關閉',
+            cancelText: '立即設定'
+          })
+          .set('modalTitle', '交易通知服務說明')
+          .set(
+            'modalContent',
+            '為保障您的交易安全並確實送達交易通知，請透過e櫃台或來電客服中心設定新電子郵件信箱。如有任何問題請洽本行客服中心(02)2182-1988，謝謝!'
+          )
+          .event('popupClose', function () {
+            stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+            yuantaApp.loadpage('grid');
+          })
+          .event('popupConfirm', function () {
+            stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+            yuantaApp.loadpage('grid');
+          })
+          .event('popupCancel', function () {
+            stockSubscriptionModule.commonService.OpenURL('https://ebank.yuantabank.com.tw/ib/');
+          })
+          .appendTo()
+          .build();
+        popup.open();
+      };
+
+      //請先開立信託戶
+      ctrl.openNotHasTrusteePopup = function () {
+        var modalData = {
+          showCloseBtn: false,
+          showConfirmBtn: true,
+          showCancelBtn: true,
+          confirmAddOnClass: false,
+          cancelAddOnClass: true,
+          confirmText: '取消',
+          cancelText: '前往'
+        };
+        var popup = yuantaApp.newBlock
+          ._commonPopupModule()
+          .set('modal', modalData)
+          .set('modalTitle', '請先開立信託戶')
+          .set('modalContent', '開完信託戶就可開始投資囉!當下立即審核，無須等候')
+          .event('popupConfirm', function () {
+            stockSubscriptionModule.commonService.OpenURL('https://ebank.yuantabank.com.tw/ecntr/tx/opentrustacct?method=login');
+          })
+          .event('popupCancel', function () {
+            stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+            yuantaApp.loadpage('_A0419_01');
+          })
+          .appendTo()
+          .build();
+        popup.open();
+      };
+
+      //是否為信託戶(查詢信託行)
+      //workCode=getFundBranch
+      ctrl.fetchGetFundBranch = function () {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchGetFundBranch(HeaderObject.GetIDNo())
+          .then(function (res) {
+            if (res && res.fundBranchList.length > 0) {
+              ctrl.data.fundBranchData = res.fundBranchList[0];
+              $d.resolve(res.fundBranchList);
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              ctrl.openNotHasTrusteePopup();
+              $d.reject(res);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //取得基金客戶基本資料和kyc資料
+      //workCode=getFundCustAndKycInfo
+      ctrl.fetchGetFundCustAndKycInfo = function (idNo, branchCode, searchType) {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchGetFundCustAndKycInfo(idNo, branchCode, searchType)
+          .then(function (res) {
+            ctrl.data.fundCustAndKycInfo = res;
+            if (!ctrl.hasKyc()) {
+              yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', {
+                  showCloseBtn: false,
+                  showConfirmBtn: true,
+                  showCancelBtn: true,
+                  confirmAddOnClass: false,
+                  cancelAddOnClass: true,
+                  confirmText: '取消',
+                  cancelText: '立刻進行'
+                })
+                .set('modalTitle', '請先進行風險等級評量')
+                .set('modalContent', '您尚未做過投資風險評量，暫時不得辦理基金申購，請先進行評估後方可進行申購。')
+                .event('popupCancel', function () {
+                  stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+                  yuantaApp.loadpage('_B03_01');
+                })
+                .appendTo()
+                .build()
+                .open();
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.isKycExpired()) {
+              yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', {
+                  showCloseBtn: false,
+                  showConfirmBtn: true,
+                  showCancelBtn: true,
+                  confirmAddOnClass: false,
+                  cancelAddOnClass: true,
+                  confirmText: '取消',
+                  cancelText: '重作問卷'
+                })
+                .set('modalTitle', '風險評量已過期')
+                .set('modalContent', '對不起，您的投資風險評量有效期限已過期，在重辦理投資風險評量前，您暫時不得辦理基金申購、轉換及變更投資標的交易。')
+                .event('popupCancel', function () {
+                  stockSubscriptionModule.dispCacheService.clearStockNameWhenGoBack();
+                  yuantaApp.loadpage('_B03_01');
+                })
+                .appendTo()
+                .build()
+                .open();
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.hasTrustVersion()) {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              var popup = yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', {
+                  showCloseBtn: false,
+                  showConfirmBtn: true,
+                  showCancelBtn: false,
+                  confirmAddOnClass: true,
+                  cancelAddOnClass: false,
+                  confirmText: '我知道了',
+                  cancelText: '立即設定'
+                })
+                .set('modalTitle', '信託換約說明')
+                .set(
+                  'modalContent',
+                  '對不起! 您尚未辦理信託契約換約聲明書之填寫，為利您未來之投資權益，新增信託交易前，請您先臨櫃(或連繫本行理財專員)辦理信託契約換約作業。'
+                )
+                .appendTo()
+                .build();
+              popup.open();
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.isCanNotPurchaseUser()) {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              var popup = yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', {
+                  showCloseBtn: false,
+                  showConfirmBtn: true,
+                  showCancelBtn: false,
+                  confirmAddOnClass: true,
+                  cancelAddOnClass: false,
+                  confirmText: '我知道了',
+                  cancelText: '立即設定'
+                })
+                .set('modalTitle', '您不適合新增理財商品')
+                .set(
+                  'modalContent',
+                  '親愛的客戶您好:<br/>對不起! 依據您於本行「客戶資料表暨投資屬性問卷表」所留存之客戶資料，您不適合新增投資「理財商品」，詳情請洽詢本行理財專員或營業單位。'
+                )
+                .appendTo()
+                .build();
+              popup.open();
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.hasFceAccountAndNotFceAcctList(ctrl.getCurrency())) {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', {
+                  showCloseBtn: false,
+                  showConfirmBtn: true,
+                  showCancelBtn: true,
+                  confirmAddOnClass: false,
+                  cancelAddOnClass: true,
+                  confirmText: '關閉',
+                  cancelText: '去開戶'
+                })
+                .set('modalTitle', '請先開立外幣帳戶')
+                .set(
+                  'modalContent',
+                  '您尚無本行外幣存款帳戶，請先至線上申辦平台開戶。如您已持有本行外幣存款帳戶，請至個人網銀設定本人帳戶間互轉或約定帳號轉出功能。'
+                )
+                .event('popupConfirm', function () {
+                  if (
+                    yuantaApp.checkLogin('_A0424', function () {
+                      location.replace('#');
+                    })
+                  ) {
+                    yuantaApp.loadpage('_A0424_01');
+                  }
+                })
+                .event('popupCancel', function () {
+                  stockSubscriptionModule.commonService.OpenURL('https://ebank.yuantabank.com.tw/ecntr/tx/openacct?p=c_yacct');
+                })
+                .appendTo()
+                .build()
+                .open();
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.hasFceAccountAndFceAcctList(ctrl.getCurrency())) {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              ctrl.data.investmentCurrencyWarnMessage =
+                '<p class="key_org">您的外幣帳戶尚未持有\
+                  <span class="txt" data-txt="' +
+                ctrl.getCurrency().toLocaleUpperCase() +
+                '"></span>，請先進行\
+                  <a id="jumpToExchange" href="javascript:void(0)">外幣換匯</a>\
+                </p>';
+              $d.resolve(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.isRiskLevelIncompatible() && ctrl.canNotReSetKYC() && +new Date() < +new Date(ctrl.getKYCLastKYCDate()).addDay(14)) {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              var modalOption = {
+                showCloseBtn: false,
+                showConfirmBtn: true,
+                showCancelBtn: false,
+                confirmAddOnClass: true,
+                cancelAddOnClass: false,
+                confirmText: '我知道了',
+                cancelText: ''
+              };
+              var popup = yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', modalOption)
+                .set('modalTitle', '風險等級不符')
+                .set('modalContent', '您選擇的境外股票/ETF風險等級高於您的風險承受度，請改選擇風險較低之商品。')
+                .adjust(function ($popup) {
+                  var $txtArea = $popup.find('.txt_area');
+                  $txtArea.append(
+                    '<div class="alert_twobutton" style="text-align: center; margin-top: 12px; margin-bottom: 12px;"><div id="clear" role="button" tabindex="9" style="text-decoration: underline; color:#323232;">看看我能投資甚麼</div></div>'
+                  );
+                  var $alertTwobutton = $popup.find('.alert_twobutton');
+                  $alertTwobutton.off().on('click', function () {
+                    var cacheFilterSearchData = { trustNo: ctrl.data.trustNo };
+                    stockSubscriptionModule.dispCacheService.cacheFilterSearchData(JSON.stringify(cacheFilterSearchData));
+                    if (
+                      yuantaApp.checkLogin('_A0434', function () {
+                        location.replace('#');
+                      })
+                    ) {
+                      yuantaApp.loadpage('_A0434_01');
+                    }
+                    popup.close();
+                  });
+                })
+                .appendTo()
+                .build()
+                .open();
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else if (ctrl.isRiskLevelIncompatible()) {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              var popup = yuantaApp.newBlock
+                ._commonPopupModule()
+                .set('modal', {
+                  showCloseBtn: false,
+                  showConfirmBtn: true,
+                  showCancelBtn: false,
+                  confirmAddOnClass: true,
+                  cancelAddOnClass: false,
+                  confirmText: '我知道了',
+                  cancelText: ''
+                })
+                .set('modalTitle', '風險等級不符')
+                .set('modalContent', '您選擇的境外股票/ETF風險等級高於您的承受度，請改選擇風險較低之商品。')
+                .appendTo()
+                .build();
+              popup.open();
+              $d.reject(ctrl.data.fundCustAndKycInfo);
+            } else {
+              $d.resolve(ctrl.data.fundCustAndKycInfo);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //取得基金外幣轉出帳戶
+      //workCode=getFundFceOutAcct
+      ctrl.fetchGetFundFceOutAcct = function () {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchGetFundFceOutAcct(HeaderObject.GetIDNo(), HeaderObject.GetLoginObject().isSelfTrans)
+          .then(function (res) {
+            if (res && res.fceAcctList && res.fceAcctList.length > 0) {
+              ctrl.data.fceAcctList = res.fceAcctList;
+            }
+            $d.resolve(res);
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //投資人清單查詢
+      //workcode=queryInvestorList
+      ctrl.fetchQueryInvestorList = function () {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchQueryInvestorList()
+          .then(function (res) {
+            if (res && res.records && res.records.length > 0) {
+              ctrl.data.stockInvestorList = res.records[0];
+              if (res.records[0].errCode || res.records[0].errMsg) {
+                stockSubscriptionModule.commonService.ToggleLoading(false);
+                yuantaApp.newBlock
+                  ._commonPopupModule()
+                  .set('modal', {
+                    showCloseBtn: false,
+                    showConfirmBtn: true,
+                    showCancelBtn: false,
+                    confirmAddOnClass: true,
+                    cancelAddOnClass: false,
+                    confirmText: '我知道了',
+                    cancelText: ''
+                  })
+                  .set('modalContent', '(' + (res.records[0].errCode || '') + ')' + (res.records[0].errMsg || ''))
+                  .appendTo()
+                  .build()
+                  .open();
+                $d.reject(res);
+              } else {
+                $d.resolve(res);
+              }
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(error);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //長效單截止日期查詢
+      //workcode=queryLongTermOrderDeadlineDate
+      ctrl.fetchQueryLongTermOrderDeadlineDate = function (marketCode) {
+        var $d = jq.Deferred();
+        var orderDate = new Date(HeaderObject.GetServerDate()).format('yyyymmdd');
+        stockSubscriptionModule.apiService
+          .FetchQueryLongTermOrderDeadlineDate(orderDate, marketCode)
+          .then(function (res) {
+            if (res && res.records && res.records.length > 0) {
+              ctrl.data.longTermOrderDate = res.records[0];
+              $d.resolve(res);
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(error);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //申購取得境外股票或ETF資料
+      //workcode=fetchStocksByStockCode
+      ctrl.fetchStocksByStockCode = function (trustNo) {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchStocksByStockCode(trustNo)
+          .then(function (res) {
+            if (res) {
+              // 111-S-94200-01157, 商品限定65歲以上不得購買
+              if (res.age65Flag == 'Y' && ctrl.data.age >= 65) {
+                yuantaApp.newBlock
+                  ._commonPopupModule()
+                  .set('modal', {
+                    showCloseBtn: false,
+                    showConfirmBtn: true,
+                    showCancelBtn: false,
+                    confirmAddOnClass: true,
+                    cancelAddOnClass: false,
+                    confirmText: '我知道了',
+                    cancelText: ''
+                  })
+                  .set('modalTitle', '交易提醒')
+                  .set('modalContent', '很抱歉！本檔商品限65歲以下客戶投資。')
+                  .appendTo()
+                  .build()
+                  .open();
+                $d.reject(res);
+              } else {
+                ctrl.data.stockData = res;
+                $d.resolve(res);
+              }
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(res);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //股票委託單傳輸-首段
+      //workcode=orderOverseasStocks
+      ctrl.fetchOrderOverseasStocks = function (stockData) {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchOrderOverseasStocks(stockData)
+          .then(function (res) {
+            ctrl.data.orderOverseasStocks = res;
+            ctrl.data.subscriptionStockData = stockData;
+            ctrl.data.subscriptionStockData.orderFormDate = res.orderFormDate;
+            ctrl.data.orderOverseasStocks.orderFormDate = res.orderFormDate;
+            ctrl.data.orderOverseasStocks.currency = ctrl.data.stockData.currency;
+            ctrl.data.orderOverseasStocks.execCode = 'BL';
+            if (res.messageCode || res.errMessage) {
+              var modalOption = {
+                showCloseBtn: false,
+                showConfirmBtn: true,
+                showCancelBtn: false,
+                confirmAddOnClass: true,
+                cancelAddOnClass: false,
+                confirmText: '確定'
+              };
+              if (res.messageCode) {
+                yuantaApp.newBlock
+                  ._commonPopupModule()
+                  .set('modal', modalOption)
+                  .set('modalTitle', res.messageCode)
+                  .set('modalContent', res.errMessage)
+                  .event('popupConfirm', function () {
+                    yuantaApp.loadpage('_A0434_01');
+                  })
+                  .appendTo()
+                  .build()
+                  .open();
+                $d.reject(res);
+              } else {
+                yuantaApp.newBlock
+                  ._commonPopupModule()
+                  .set('modal', modalOption)
+                  .set('modalContent', res.errMessage)
+                  .event('popupConfirm', function () {
+                    yuantaApp.loadpage('_A0434_01');
+                  })
+                  .appendTo()
+                  .build()
+                  .open();
+                $d.reject(res);
+              }
+            } else {
+              $d.resolve(res);
+            }
+            $d.resolve(res);
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          })
+          .always(function () {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+          });
+        return $d.promise();
+      };
+
+      //股票委託單傳輸-次段-密碼驗證
+      //workcode=orderOverseasStocksPwd
+      ctrl.fetchOrderOverseasStocksPwd = function (stockData) {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchOrderOverseasStocksPwd(stockData)
+          .then(function (res) {
+            $d.resolve(res);
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          })
+          .always(function () {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+          });
+        return $d.promise();
+      };
+
+      //股票委託單傳輸-次段-次段-生物辨識驗證
+      //workcode=orderOverseasStocksTouchID
+      ctrl.fetchOrderOverseasStocksTouchID = function (stockData) {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchOrderOverseasStocksTouchID(stockData)
+          .then(function (res) {
+            $d.resolve(res);
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          })
+          .always(function () {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+          });
+        return $d.promise();
+      };
+
+      //是否為股票營業時間
+      //workCode=isStockBuyBuzDate
+      ctrl.fetchIsStockBuyBuzDate = function () {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchIsStockBuyBuzDate()
+          .then(function (res) {
+            if (res && res.isStockBuyBuzDate && res.isStockBuyBuzDate.length > 0) {
+              if (res.isStockBuyBuzDate[0] !== '0') {
+                stockSubscriptionModule.commonService.ToggleLoading(false);
+                yuantaApp.newBlock
+                  ._commonPopupModule()
+                  .set('modal', {
+                    showCloseBtn: false,
+                    showConfirmBtn: true,
+                    showCancelBtn: false,
+                    confirmAddOnClass: true,
+                    cancelAddOnClass: false,
+                    confirmText: '我知道了',
+                    cancelText: ''
+                  })
+                  .set('modalTitle', '系統維護中')
+                  .set('modalContent', '每日06:00〜06:35為系統維護時間，此時段不開放股權商品買賣委託交易！請稍後再試，謝謝。')
+                  .event('popupConfirm', function () {
+                    if (
+                      yuantaApp.checkLogin('_A0440', function () {
+                        location.replace('#');
+                      })
+                    ) {
+                      yuantaApp.loadpage('_A0440_01');
+                    }
+                  })
+                  .appendTo()
+                  .build()
+                  .open();
+                $d.reject(res);
+              } else {
+                $d.resolve(res);
+              }
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(res);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //是否為基金營業時間
+      //workCode=isFundBuyBusinessdate
+      ctrl.fetchIsFundBuyBusinessdate = function () {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchIsFundBuyBusinessdate()
+          .then(function (res) {
+            if (res && res.isFundBuyBusinessdate && res.isFundBuyBusinessdate.length > 0) {
+              ctrl.data.isFundBuyBusinessdate = res.isFundBuyBusinessdate[0];
+              $d.resolve(ctrl.data.isFundBuyBusinessdate);
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(res);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      //取得匯率(牌告)
+      //workcode=getFceRate
+      ctrl.fetchGetFceRate = function (outCcy) {
+        var $d = jq.Deferred();
+        stockSubscriptionModule.apiService
+          .FetchGetFceRate(outCcy)
+          .then(function (res) {
+            if (res && res.rate) {
+              ctrl.data.rate = +res.rate;
+              $d.resolve(res);
+            } else {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(error);
+            }
+          })
+          .catch(function (error) {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(error);
+          });
+        return $d.promise();
+      };
+
+      /** 股票
+       * @param trustNo 股票識別號碼
+       */
+      ctrl.fetchInit = function (trustNo) {
+        stockSubscriptionModule.commonService.ToggleLoading(true);
+        var $d = jq.Deferred();
+        if (!trustNo) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(false);
+        } else if (!ctrl.hasUserInfo()) {
+          ctrl.openWarnPopupWhenUserInfoNonExist();
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(false);
+        } else {
+          ctrl.data.invType = '1'; //目前只有單筆申購
+          ctrl.data.trustNo = trustNo;
+          ctrl
+            .fetchIsStockBuyBuzDate()
+            .then(function () {
+              ctrl
+                .fetchStocksByStockCode(ctrl.data.trustNo)
+                .then(function () {
+                  ctrl
+                    .fetchGetFundBranch()
+                    .then(function () {
+                      ctrl
+                        .fetchGetFundFceOutAcct()
+                        .then(function () {
+                          ctrl
+                            .fetchGetFundCustAndKycInfo(HeaderObject.GetIDNo(), ctrl.data.fundBranchData.branchCode, '1')
+                            .then(function () {
+                              ctrl
+                                .fetchQueryInvestorList()
+                                .then(function () {
+                                  jq.when(
+                                    ctrl.fetchIsFundBuyBusinessdate(),
+                                    ctrl.fetchQueryLongTermOrderDeadlineDate(ctrl.data.stockData.marketType),
+                                    ctrl.fetchGetFceRate(ctrl.data.stockData.currency)
+                                  )
+                                    .then(function () {
+                                      if (ctrl.data.stockData.stopCode) {
+                                        stockSubscriptionModule.commonService.ToggleLoading(false);
+                                        var popup = yuantaApp.newBlock
+                                          ._commonPopupModule()
+                                          .set('modal', {
+                                            showCloseBtn: false,
+                                            showConfirmBtn: true,
+                                            showCancelBtn: false,
+                                            confirmAddOnClass: true,
+                                            cancelAddOnClass: false,
+                                            confirmText: '關閉'
+                                          })
+                                          .set('modalContent', '很抱歉！本檔暫停申購交易')
+                                          .appendTo()
+                                          .build();
+                                        popup.open();
+                                        $d.reject(ctrl.data);
+                                      } else {
+                                        stockSubscriptionModule.commonService.ToggleLoading(false);
+                                        $d.resolve(ctrl.data);
+                                      }
+                                    })
+                                    .catch(function () {
+                                      stockSubscriptionModule.commonService.ToggleLoading(false);
+                                      $d.reject(false);
+                                    })
+                                    .always(function () {
+                                      stockSubscriptionModule.commonService.ToggleLoading(false);
+                                    });
+                                })
+                                .catch(function () {
+                                  stockSubscriptionModule.commonService.ToggleLoading(false);
+                                  $d.reject(false);
+                                });
+                            })
+                            .catch(function () {
+                              stockSubscriptionModule.commonService.ToggleLoading(false);
+                              $d.reject(false);
+                            });
+                        })
+                        .catch(function () {
+                          stockSubscriptionModule.commonService.ToggleLoading(false);
+                          $d.reject(false);
+                        });
+                    })
+                    .catch(function () {
+                      stockSubscriptionModule.commonService.ToggleLoading(false);
+                      $d.reject(false);
+                    });
+                })
+                .catch(function () {
+                  stockSubscriptionModule.commonService.ToggleLoading(false);
+                  $d.reject(false);
+                });
+            })
+            .catch(function () {
+              stockSubscriptionModule.commonService.ToggleLoading(false);
+              $d.reject(false);
+            });
+        }
+        return $d.promise();
+      };
+
+      return ctrl;
+    }
+    try {
+      stockSubscriptionModule.dispCacheService.clearFilterSearchData();
+      stockSubscriptionModule
+        .SubscriptionPopup()
+        .set('invType', '1') //目前只有單筆申購
+        .set('trustNo', data.trustNo)
+        .service('subscriptionStockService', new SubscriptionStockService())
+        .appendTo('#funcPageContent')
+        .build();
+      yuantaApp.pageContentResizeCustom();
+    } catch (error) {
+      console.error('error: ', error);
+    }
+  }
+  controller(HeaderObject.GetData());
+</script>
+
+<style>
+  [data-pageid='_A0436_01'] .input_box textarea {
+    border: none !important;
+  }
+
+  .pop .num li::before {
+    color: black;
+  }
+  body {
+    scroll-behavior: smooth;
+  }
+</style>

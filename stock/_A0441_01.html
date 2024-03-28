@@ -1,0 +1,131 @@
+<div id="funcBar" class="bg_blue"></div>
+<div id="tabTitle" class="newBlock bg_blue"></div>
+<div id="funcPageContent" class="newBlock" data-pageid="_A0441_01"></div>
+<div id="footer"></div>
+<div id="footerMenu"></div>
+
+<script>
+  function controller() {
+    var ctrl = {};
+    ctrl.data = {
+      pageid: jq('#funcPageContent').data('pageid'),
+      enabledSwitch_A0440: null,
+      custStocksData: []
+    };
+
+    //股票-客戶庫存查詢
+    //workcode=queryCustStocks
+    ctrl.fetchQueryCustStocks = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchQueryCustStocks()
+        .then(function (res) {
+          ctrl.data.custStocksData = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    function initListView() {
+      stockSubscriptionModule
+        .StockInitListView()
+        .set('custStocksData', ctrl.data.custStocksData)
+        .set('enabledSwitch_A0440', ctrl.data.enabledSwitch_A0440)
+        .appendTo('#funcPageContent')
+        .build();
+    }
+
+    function initEmptyView(type, title) {
+      stockSubscriptionModule.StockInitEmptyView().set('type', type).set('title', title).appendTo('#funcPageContent').build();
+    }
+
+    function init() {
+      function getFetchQueryCustStocks() {
+        ctrl
+          .fetchQueryCustStocks()
+          .then(function (res) {
+            //判斷是否有資料
+            if (
+              (ctrl.data.custStocksData && ctrl.data.custStocksData.records == undefined) ||
+              (ctrl.data.custStocksData && ctrl.data.custStocksData.records.length <= 0)
+            ) {
+              initEmptyView('empty', '目前尚無庫存');
+            } else {
+              ctrl.data.enabledSwitch_A0440 = HeaderObject.GetData().enabledSwitch_A0440 || false;
+              initListView();
+            }
+          })
+          .catch(function (data) {
+            var modalOption = {
+              showCloseBtn: false,
+              showConfirmBtn: true,
+              showCancelBtn: false,
+              confirmAddOnClass: true,
+              cancelAddOnClass: false,
+              confirmText: '確定'
+            };
+
+            /* workcode=queryCustStocks 錯誤代碼控制
+             * BKF_0001: 其他錯誤
+             * BKF_0002: 身份證號不可為空白
+             * BKF_0003: 客戶沒有信託開戶
+             * BKF_0004: 客戶有信託開戶，但無股權商品成交紀錄
+             * BKF_0005: 客戶有信託開戶，有股權商品成交紀錄，但目前無庫存
+             */
+            if (data.errorCode === 'BKF_0003') {
+              initEmptyView('isNotBranch', '目前尚無庫存');
+            } else if (data.errorCode === 'BKF_0004' || data.errorCode === 'BKF_0005') {
+              initEmptyView('empty', '目前尚無庫存');
+            } else if (data.errorCode && data.errorMessage) {
+              var message = '(' + data.errorCode + ')' + data.errorMessage;
+              yuantaApp.newBlock._commonPopupModule().set('modal', modalOption).set('modalContent', message).appendTo().build().open();
+            } else if (data.errorMessage) {
+              yuantaApp.newBlock._commonPopupModule().set('modal', modalOption).set('modalContent', data.errorMessage).appendTo().build().open();
+            } else {
+              yuantaApp.newBlock._commonPopupModule().set('modal', modalOption).set('modalContent', '系統錯誤，請稍後再試').appendTo().build().open();
+            }
+          })
+          .always(function () {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+          });
+      }
+
+      //取得_A0440_01資料
+      if (HeaderObject.GetData()) {
+        if (HeaderObject.GetData().openEmptyView) {
+          if (HeaderObject.GetData().openEmptyView_type && HeaderObject.GetData().openEmptyView_title) {
+            initEmptyView(HeaderObject.GetData().openEmptyView_type, HeaderObject.GetData().openEmptyView_title);
+          } else {
+            initEmptyView('empty', '目前尚無庫存');
+          }
+        } else if (HeaderObject.GetData().custStocksData && Object.prototype.toString.call(HeaderObject.GetData().custStocksData) === '[object Object]') {
+          ctrl.data.custStocksData = HeaderObject.GetData().custStocksData;
+          ctrl.data.enabledSwitch_A0440 = HeaderObject.GetData().enabledSwitch_A0440 || false;
+          initListView();
+        } else {
+          getFetchQueryCustStocks();
+        }
+      } else {
+        getFetchQueryCustStocks();
+      }
+    }
+    init();
+  }
+  controller();
+</script>
+
+<style>
+  #funcPageContent {
+    background-color: #f5f5f5;
+  }
+  .newBlock .detail_box .top.link {
+    text-decoration: none;
+  }
+  #contentArea {
+    width: 100vw;
+  }
+</style>

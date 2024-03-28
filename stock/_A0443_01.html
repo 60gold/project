@@ -1,0 +1,235 @@
+<div id="funcBar" class="bg_blue"></div>
+<div id="tabTitle" class="newBlock bg_blue"></div>
+<div id="funcPageContent" class="newBlock bg_blue" data-pageid="_A0443_01"></div>
+<div id="footer"></div>
+<div id="footerMenu"></div>
+
+<div id="stockProductSearchPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+<div id="stockPopularityRankingTagPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+<div id="stockFilterSearchPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+<div id="stockSearchResultPopup" class="overlay fullPopup" data-snap-ignore="true"></div>
+
+<script>
+  function controller() {
+    var ctrl = {};
+    ctrl.data = {
+      pageid: jq('#funcPageContent').data('pageid'),
+      stocksListHot: [],
+      stocksListAll: []
+    };
+
+    //依據參數設定查詢熱門境外股票及ETF
+    //workcode=fetchStocksListHot
+    ctrl.fetchStocksListHot = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchStocksListHot()
+        .then(function (res) {
+          ctrl.data.stocksListHot = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //查詢所有可申購境外股票及ETF
+    //workcode=fetchStocksListAll
+    ctrl.fetchStocksListAll = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchStocksListAll()
+        .then(function (res) {
+          ctrl.data.stocksListAll = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //點小卡跳到申購頁面
+    function cardClickEvent($this) {
+      var trustNo = $this.data('trustno');
+      if (trustNo) {
+        HeaderObject.SetData({ trustNo: trustNo });
+        if (
+          yuantaApp.checkLogin('_A0436', function () {
+            location.replace('#');
+          })
+        ) {
+          stockDispCacheService.setGoBackPageID(jq('#funcPageContent').data('pageid'));
+          yuantaApp.loadpage('_A0436_01', true);
+        }
+      }
+    }
+
+    function linkBoxEvent($this) {
+      var trustNo = $this.parent().find('.btn_blue').data('trustno');
+      var url = 'https://yuantabank.moneydj.com/w/CustFundIDMap.djhtm?A=' + trustNo + '&B=1001';
+      yuantaApp.openURL(url);
+    }
+
+    //產品搜尋
+    function stockProductSearchPopupModule() {
+      var stockProductSearchPopup;
+      var title = 'stockProductSearchPopupTitle';
+      //標籤
+      var tags = [
+        {
+          id: 'StockListHot', //熱門
+          name: 'StockListHot'
+        },
+        {
+          id: 'StockListETF', //國內ETF
+          name: 'StockListETF'
+        }
+      ];
+      var close = function () {
+        history.back();
+      };
+      var hotTagsClick = function ($this) {
+        var tagName = $this.attr('id');
+        var fetchStocksListHotRes = ctrl.data.stocksListHot;
+        var data = [];
+        switch (tagName) {
+          case 'StockListHot':
+            data = fetchStocksListHotRes.hasOwnProperty('StockListHot') ? fetchStocksListHotRes['StockListHot'] : [];
+            break;
+          case 'StockListETF':
+            data = fetchStocksListHotRes.hasOwnProperty('StockListETF') ? fetchStocksListHotRes['StockListETF'] : [];
+            break;
+        }
+        stockProductSearchPopup.close();
+        stockPopularityRankingTagPopupModule(tagName, data);
+      };
+      //產品搜尋
+      stockProductSearchPopup = stockSubscriptionModule
+        .StockProductSearchPopupModule()
+        .set('title', title)
+        .set('tags', tags)
+        .set('stockAllListService', ctrl.data.stocksListAll.StocksList)
+        .event('close', close)
+        .event('hotTagsClick', hotTagsClick)
+        .event('stockCardClick', cardClickEvent)
+        .event('stockCardLinkBoxClick', linkBoxEvent)
+        .event('filterBtnClick', function () {
+          stockFilterSearchPopup();
+        })
+        .appendTo('#stockProductSearchPopup')
+        .build()
+        .open();
+    }
+
+    //熱門搜尋標籤
+    function stockPopularityRankingTagPopupModule(tagName, data) {
+      var stockPopularityRankingTagPopup = stockSubscriptionModule
+        .stockPopularityRankingTagPopupModule()
+        .set('title', 'popularityRankingTagPopupTitle')
+        .set('tagName', tagName)
+        .set('stockList', data)
+        .event('close', function () {
+          stockPopularityRankingTagPopup.close();
+          stockProductSearchPopupModule();
+        })
+        .event('stockCardClick', cardClickEvent)
+        .event('stockCardLinkBoxClick', linkBoxEvent)
+        .appendTo('#stockPopularityRankingTagPopup')
+        .build();
+      stockPopularityRankingTagPopup.open();
+    }
+
+    //篩選條件popup
+    function stockFilterSearchPopup(data) {
+      var openPopup = function () {
+        var popup = stockSubscriptionModule
+          .StockFilterSearchPopupModule()
+          .set('title', 'stockFilterSearchPopupTitle')
+          .set('defaultData', data)
+          .event('popupClose', function () {
+            popup.close();
+            stockProductSearchPopupModule();
+          })
+          .event('popupConfirm', function (data) {
+            popup.close();
+            showNewLoadingViewUseBlockUI();
+            stockSearchResultPopup(data, ctrl.data.stocksListAll.StocksList);
+            setTimeout(function () {
+              jq.unblockUI();
+            }, 1000);
+          })
+          .appendTo('#stockFilterSearchPopup')
+          .build();
+        popup.open();
+      };
+      openPopup();
+    }
+
+    //條件篩選結果popup
+    function stockSearchResultPopup(query, stocksListAll) {
+      // var showRegularQuotaFlag = query.showRegularQuotaFlag;
+      var currentMarket = query.currentMarket || '';
+      var currentSelectRisk = query.currentSelectRisk || [];
+      var currentSelectCCyList = query.currentSelectCCyList || [];
+      var popup = stockSubscriptionModule
+        .StockSearchResultPopupModule()
+        .set('title', 'stockSearchResultPopupTitle')
+        .set('query', {
+          // showRegularQuotaFlag: showRegularQuotaFlag,
+          currentMarket: currentMarket,
+          currentSelectRisk: currentSelectRisk,
+          currentSelectCCyList: currentSelectCCyList
+        })
+        .set('stocksListAll', stocksListAll)
+        .event('popupClose', function (data) {
+          popup.close();
+          stockFilterSearchPopup(data);
+        })
+        .event('stockCardClick', cardClickEvent)
+        .event('stockCardLinkBoxClick', linkBoxEvent)
+        .appendTo('#stockSearchResultPopup')
+        .build();
+      popup.open();
+    }
+
+    function init() {
+      jq.when(ctrl.fetchStocksListHot(), ctrl.fetchStocksListAll())
+        .then(function () {
+          stockProductSearchPopupModule();
+          yuantaApp.pageContentResizeCustom('#footerMenu');
+          yuantaApp.gettransarr();
+        })
+        .catch(function () {
+          yuantaApp.loadpage('grid');
+        })
+        .always(function () {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+        });
+    }
+    init();
+  }
+  controller();
+</script>
+
+<style>
+  #funcBar #backIcon,
+  #funcBar .menuIcon,
+  #tabTitle {
+    display: none;
+  }
+  #funcPageContent {
+    background-color: #fff !important;
+  }
+  #funcPageContent .content {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 45px);
+  }
+  #funcPageContent .data_set .heading {
+    padding: 0 10px 0 12px;
+  }
+</style>

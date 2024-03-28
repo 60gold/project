@@ -1,0 +1,253 @@
+<div id="mainPage2">
+  <div id="funcBar" class="bg_blue"></div>
+  <div id="tabTitle" class="newBlock bg_blue"></div>
+  <div id="funcPageContent" class="newBlock bg_blue" data-pageid="_A0440_01">
+    <div class="upper">
+      <div class="top_rounded_area"></div>
+      <div id="mountArea"></div>
+    </div>
+  </div>
+  <div id="footer"></div>
+  <div id="footerMenu"></div>
+</div>
+
+<script>
+  function controller() {
+    var ctrl = {};
+    ctrl.data = {
+      pageid: jq('#funcPageContent').data('pageid'),
+      sortKey: '',
+      txnBranchCode: '',
+      custStocksData: [],
+      stocksListHot: [],
+      openEmptyView: false,
+      openEmptyView_type: '',
+      openEmptyView_title: ''
+    };
+
+    //是否為信託戶
+    //workCode=getFundBranch
+    ctrl.fetchGetFundBranch = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchGetFundBranch(HeaderObject.GetIDNo())
+        .then(function (res) {
+          if (res && res.fundBranchList.length > 0) {
+            ctrl.data.txnBranchCode = res.fundBranchList[0].branchCode;
+            $d.resolve(res);
+          } else {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+            $d.reject(res);
+          }
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          openEmptyView('isNotBranch', '目前尚無庫存');
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //取得基金客戶基本資料和kyc資料
+    //workCode=getFundCustAndKycInfo
+    ctrl.fetchGetFundCustAndKycInfo = function (branchCode) {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchGetFundCustAndKycInfo(HeaderObject.GetIDNo(), branchCode, '1')
+        .then(function (res) {
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //股票-客戶庫存查詢
+    //workcode=queryCustStocks
+    ctrl.fetchQueryCustStocks = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchQueryCustStocks()
+        .then(function (res) {
+          ctrl.data.custStocksData = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //依據參數設定查詢熱門境外股票及ETF
+    //workcode=fetchStocksListHot
+    ctrl.fetchStocksListHot = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchStocksListHot()
+        .then(function (res) {
+          ctrl.data.stocksListHot = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //上方tab
+    function tabGropuModule() {
+      jq('#funcPageContent').find('.top_header').remove();
+      stockSubscriptionModule
+        .StockTab()
+        .event('click', function (key) {
+          switch (key) {
+            case '_A0441_01':
+              // yuantaApp.simulateClickSlideMenu('_A0441');
+              goA0441page();
+              break;
+            case '_A0442_01':
+              // yuantaApp.simulateClickSlideMenu('_A0442');
+              yuantaApp.loadpage('_A0442_01');
+              break;
+          }
+        })
+        .appendTo('.upper', 'prepend')
+        .build();
+    }
+
+    //前往_A0441_01
+    function goA0441page() {
+      if (!ctrl.data.openEmptyView) {
+        HeaderObject.SetData({
+          custStocksData: ctrl.data.custStocksData,
+          enabledSwitch_A0440: jq('input[name=enabledSwitch]').prop('checked')
+        });
+      } else {
+        HeaderObject.SetData({
+          openEmptyView: ctrl.data.openEmptyView,
+          openEmptyView_type: ctrl.data.openEmptyView_type,
+          openEmptyView_title: ctrl.data.openEmptyView_title
+        });
+      }
+      yuantaApp.loadpage('_A0441_01', true);
+    }
+
+    //庫存績效-無庫存
+    function openEmptyView(type, title) {
+      ctrl.data.openEmptyView = true;
+      ctrl.data.openEmptyView_type = type;
+      ctrl.data.openEmptyView_title = title;
+
+      stockSubscriptionModule
+        .StockEmptyView()
+        .set('type', type)
+        .set('title', title)
+        .set('stocksListHot', ctrl.data.stocksListHot)
+        .appendTo('.top_rounded_area')
+        .build();
+    }
+
+    //庫存績效-有庫存
+    function initView() {
+      stockSubscriptionModule
+        .StockInitView()
+        .set('custStocksData', ctrl.data.custStocksData)
+        .set('stocksListHot', ctrl.data.stocksListHot)
+        .event('detail', function () {
+          goA0441page();
+        })
+        .appendTo('.top_rounded_area')
+        .build();
+    }
+
+    function init() {
+      ctrl.fetchStocksListHot().then(function () {
+        tabGropuModule();
+
+        //信用卡戶檢核
+        if (HeaderObject.GetLoginObject().userType === '0') {
+          openEmptyView('credit', '目前尚無庫存');
+        } else {
+          ctrl.fetchGetFundBranch().then(function (res) {
+            if (res && res.fundBranchList.length > 0) {
+              ctrl.fetchGetFundCustAndKycInfo(ctrl.data.txnBranchCode).then(function (res) {
+                ctrl
+                  .fetchQueryCustStocks()
+                  .then(function (res) {
+                    //判斷是否有資料
+                    if (
+                      (ctrl.data.custStocksData && ctrl.data.custStocksData.records == undefined) ||
+                      (ctrl.data.custStocksData && ctrl.data.custStocksData.records.length <= 0)
+                    ) {
+                      openEmptyView('empty', '目前尚無庫存');
+                    } else {
+                      initView();
+                    }
+                  })
+                  .catch(function (data) {
+                    var modalOption = {
+                      showCloseBtn: false,
+                      showConfirmBtn: true,
+                      showCancelBtn: false,
+                      confirmAddOnClass: true,
+                      cancelAddOnClass: false,
+                      confirmText: '確定'
+                    };
+
+                    /* workcode=queryCustStocks 錯誤代碼控制
+                     * BKF_0001: 其他錯誤
+                     * BKF_0002: 身份證號不可為空白
+                     * BKF_0003: 客戶沒有信託開戶
+                     * BKF_0004: 客戶有信託開戶，但無股權商品成交紀錄
+                     * BKF_0005: 客戶有信託開戶，有股權商品成交紀錄，但目前無庫存
+                     */
+                    if (data.errorCode === 'BKF_0003') {
+                      openEmptyView('isNotBranch', '目前尚無庫存');
+                    } else if (data.errorCode === 'BKF_0004' || data.errorCode === 'BKF_0005') {
+                      openEmptyView('empty', '目前尚無庫存');
+                    } else if (data.errorCode && data.errorMessage) {
+                      var message = '(' + data.errorCode + ')' + data.errorMessage;
+                      yuantaApp.newBlock._commonPopupModule().set('modal', modalOption).set('modalContent', message).appendTo().build().open();
+                    } else if (data.errorMessage) {
+                      yuantaApp.newBlock._commonPopupModule().set('modal', modalOption).set('modalContent', data.errorMessage).appendTo().build().open();
+                    } else {
+                      yuantaApp.newBlock._commonPopupModule().set('modal', modalOption).set('modalContent', '系統錯誤，請稍後再試').appendTo().build().open();
+                    }
+                  })
+                  .always(function () {
+                    stockSubscriptionModule.commonService.ToggleLoading(false);
+                  });
+              });
+            } else {
+              openEmptyView('isNotBranch', '目前尚無庫存');
+            }
+          });
+        }
+      });
+    }
+    init();
+  }
+  controller();
+</script>
+
+<style>
+  #mainPage2 {
+    max-width: 100%;
+    min-width: 100%;
+    position: absolute;
+  }
+  .newBlock .detail_box .top.link {
+    text-decoration: none;
+  }
+  #hotSell .data_set .date,
+  #featuredETF .data_set .date {
+    padding-right: 0px;
+    margin-bottom: 0;
+    text-align: center;
+    font-family: 'Roboto', sans-serif !important;
+  }
+</style>

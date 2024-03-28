@@ -1,0 +1,104 @@
+<div id="funcBar" class="bg_blue"></div>
+<div id="tabTitle" class="newBlock bg_blue"></div>
+<div id="funcPageContent" class="newBlock" data-pageid="_A0441_02"></div>
+<div id="footer"></div>
+<div id="footerMenu"></div>
+
+<script>
+  function controller() {
+    var ctrl = {};
+    ctrl.data = {
+      pageid: jq('#funcPageContent').data('pageid'),
+      stockData: [],
+      stockDetailData: []
+    };
+
+    //股票-客戶庫存查詢
+    //workcode=queryCustStocks
+    ctrl.fetchQueryCustStocks = function () {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchQueryCustStocks()
+        .then(function (res) {
+          ctrl.data.custStocksData = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    //客戶庫存未平倉查詢
+    //workcode=queryOpenPositionStock
+    ctrl.fetchQueryOpenPositionStock = function (goodNo) {
+      var $d = jq.Deferred();
+      stockSubscriptionModule.apiService
+        .FetchQueryOpenPositionStock(goodNo)
+        .then(function (res) {
+          ctrl.data.stockDetailData = res;
+          $d.resolve(res);
+        })
+        .catch(function (error) {
+          stockSubscriptionModule.commonService.ToggleLoading(false);
+          $d.reject(error);
+        });
+      return $d.promise();
+    };
+
+    function initDetailView() {
+      stockSubscriptionModule
+        .StockDetailView()
+        .set('stockData', ctrl.data.stockData)
+        .set('stockDetailData', ctrl.data.stockDetailData)
+        .appendTo('#funcPageContent')
+        .build();
+    }
+
+    function init() {
+      //取得_A0440_01資料
+      if (
+        HeaderObject.GetData() &&
+        HeaderObject.GetData().stockData &&
+        Object.prototype.toString.call(HeaderObject.GetData().stockData) === '[object Object]'
+      ) {
+        ctrl.data.stockData = HeaderObject.GetData().stockData;
+        var trustNo = ctrl.data.stockData.trustNo;
+        ctrl
+          .fetchQueryOpenPositionStock(trustNo)
+          .then(function () {
+            if (
+              (ctrl.data.stockDetailData && ctrl.data.stockDetailData.records == undefined) ||
+              (ctrl.data.stockDetailData && ctrl.data.stockDetailData.records.length <= 0)
+            ) {
+              yuantaApp.showError('系統錯誤，請稍後再試。', true, true, function () {
+                yuantaApp.loadpage('grid');
+              });
+            } else {
+              initDetailView();
+            }
+          })
+          .catch(function () {
+            yuantaApp.loadpage('grid');
+          })
+          .always(function () {
+            stockSubscriptionModule.commonService.ToggleLoading(false);
+          });
+      } else {
+        yuantaApp.showError('系統錯誤，請稍後再試。', true, true, function () {
+          yuantaApp.loadpage('grid');
+        });
+      }
+    }
+    init();
+  }
+  controller();
+</script>
+
+<style>
+  .wrapper,
+  .common {
+    background-color: #fff;
+  }
+</style>
